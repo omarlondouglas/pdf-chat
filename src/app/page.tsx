@@ -1,65 +1,323 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
+import { LogOut, Plus, Trash2, MessageSquare } from "lucide-react";
+import ChatInput from "@/components/ui/prompt-input-dynamic-grow";
+import { MarkdownMessage } from "@/components/ui/markdown-message";
+
+const HeroWave = dynamic(
+  () => import("@/components/ui/ai-input-hero").then((m) => m.HeroWave),
+  { ssr: false }
+);
+
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface Conversation {
+  id: string;
+  title: string;
+  updated_at: string;
+}
 
 export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+  const router = useRouter();
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [bootstrapped, setBootstrapped] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const loadConversations = useCallback(async () => {
+    const res = await fetch("/api/conversations");
+    if (!res.ok) return [];
+    const data = await res.json();
+    setConversations(data.conversations);
+    return data.conversations as Conversation[];
+  }, []);
+
+  const loadMessages = useCallback(async (id: string) => {
+    const res = await fetch(`/api/conversations/${id}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    setMessages(
+      (data.messages as { role: "user" | "assistant"; content: string }[]).map(
+        (m) => ({ role: m.role, content: m.content })
+      )
+    );
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      await loadConversations();
+      setBootstrapped(true);
+    })();
+  }, [loadConversations]);
+
+  useEffect(() => {
+    if (activeId) loadMessages(activeId);
+    else setMessages([]);
+  }, [activeId, loadMessages]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages, loading]);
+
+  async function ensureConversation(): Promise<string> {
+    if (activeId) return activeId;
+    const res = await fetch("/api/conversations", { method: "POST" });
+    const data = await res.json();
+    const id = data.conversation.id as string;
+    setActiveId(id);
+    setConversations((prev) => [data.conversation, ...prev]);
+    return id;
+  }
+
+  async function send(value: string) {
+    setLoading(true);
+    const conversationId = await ensureConversation();
+    const optimistic: Message[] = [...messages, { role: "user", content: value }];
+    setMessages(optimistic);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId, message: value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "request failed");
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: data.answer },
+      ]);
+      // refresh conversation list (title may have updated)
+      loadConversations();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro desconhecido";
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `⚠️ ${msg}` },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function newConversation() {
+    setActiveId(null);
+    setMessages([]);
+  }
+
+  async function deleteConversation(id: string) {
+    if (!confirm("Excluir esta conversa?")) return;
+    await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    if (activeId === id) {
+      setActiveId(null);
+      setMessages([]);
+    }
+  }
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/login");
+    router.refresh();
+  }
+
+  if (!bootstrapped) {
+    return (
+      <main className="min-h-screen bg-[#05060a] flex items-center justify-center text-gray-400 text-sm">
+        Carregando...
+      </main>
+    );
+  }
+
+  // Empty state (no active conversation, no messages) → HeroWave
+  if (!activeId && messages.length === 0) {
+    return (
+      <main className="bg-[#05060a] min-h-screen flex">
+        <Sidebar
+          conversations={conversations}
+          activeId={activeId}
+          onSelect={setActiveId}
+          onNew={newConversation}
+          onDelete={deleteConversation}
+          onLogout={logout}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div className="flex-1 relative">
+          <HeroWave
+            title="Converse com seu PDF"
+            subtitle="Pergunte qualquer coisa sobre o calendário nacional de vacinação 2026"
+            buttonText="Enviar"
+            onPromptSubmit={send}
+            loading={loading}
+            showNavbar={false}
+          />
         </div>
       </main>
-    </div>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-[#05060a] text-white flex relative overflow-hidden">
+      <Sidebar
+        conversations={conversations}
+        activeId={activeId}
+        onSelect={setActiveId}
+        onNew={newConversation}
+        onDelete={deleteConversation}
+        onLogout={logout}
+      />
+
+      <div className="flex-1 flex flex-col relative">
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-[40vh] opacity-60"
+          style={{
+            background:
+              "radial-gradient(ellipse at top, rgba(31,61,188,0.35), transparent 60%)",
+          }}
+        />
+
+        <header className="relative z-10 px-6 py-4 border-b border-white/10 bg-black/30 backdrop-blur flex items-center justify-between">
+          <h1 className="text-sm font-medium text-white/90 truncate">
+            {conversations.find((c) => c.id === activeId)?.title ||
+              "Nova conversa"}
+          </h1>
+        </header>
+
+        <div
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto px-4 py-8 relative z-10"
+        >
+          <div className="max-w-3xl mx-auto flex flex-col gap-4">
+            {messages.map((m, i) => (
+              <div
+                key={i}
+                className={`flex ${
+                  m.role === "user" ? "justify-end" : "justify-start"
+                }`}
+              >
+                <div
+                  className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+                    m.role === "user"
+                      ? "bg-[#1f3dbc] text-white shadow-[0_4px_24px_rgba(31,61,188,0.4)] whitespace-pre-wrap"
+                      : "bg-white/5 border border-white/10 text-gray-100 backdrop-blur-md"
+                  }`}
+                >
+                  {m.role === "assistant" ? (
+                    <MarkdownMessage content={m.content} />
+                  ) : (
+                    m.content
+                  )}
+                </div>
+              </div>
+            ))}
+            {loading && (
+              <div className="flex justify-start">
+                <div className="bg-white/5 border border-white/10 px-4 py-3 rounded-2xl text-sm text-gray-400 flex gap-1">
+                  <span className="animate-bounce [animation-delay:-0.3s]">
+                    ●
+                  </span>
+                  <span className="animate-bounce [animation-delay:-0.15s]">
+                    ●
+                  </span>
+                  <span className="animate-bounce">●</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="sticky bottom-6 px-4 z-20 flex justify-center">
+          <ChatInput
+            placeholder="Pergunte sobre o PDF"
+            onSubmit={send}
+            disabled={loading}
+            textColor="#ffffff"
+            backgroundOpacity={0.08}
+          />
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function Sidebar({
+  conversations,
+  activeId,
+  onSelect,
+  onNew,
+  onDelete,
+  onLogout,
+}: {
+  conversations: Conversation[];
+  activeId: string | null;
+  onSelect: (id: string) => void;
+  onNew: () => void;
+  onDelete: (id: string) => void;
+  onLogout: () => void;
+}) {
+  return (
+    <aside className="w-64 shrink-0 bg-black/40 border-r border-white/10 backdrop-blur flex flex-col h-screen sticky top-0 z-30">
+      <div className="p-4 border-b border-white/10">
+        <button
+          onClick={onNew}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm text-white transition-colors"
+        >
+          <Plus size={16} />
+          Nova conversa
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto py-2">
+        {conversations.length === 0 && (
+          <div className="px-4 py-6 text-xs text-gray-500 text-center">
+            Sem conversas ainda
+          </div>
+        )}
+        {conversations.map((c) => (
+          <div
+            key={c.id}
+            className={`group mx-2 mb-1 px-3 py-2 rounded-lg cursor-pointer flex items-center gap-2 text-sm transition-colors ${
+              activeId === c.id
+                ? "bg-white/10 text-white"
+                : "text-gray-400 hover:bg-white/5 hover:text-white"
+            }`}
+            onClick={() => onSelect(c.id)}
+          >
+            <MessageSquare size={14} className="shrink-0" />
+            <span className="flex-1 truncate">{c.title}</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(c.id);
+              }}
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-red-400"
+              aria-label="Excluir conversa"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="p-4 border-t border-white/10">
+        <button
+          onClick={onLogout}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+        >
+          <LogOut size={16} />
+          Sair
+        </button>
+      </div>
+    </aside>
   );
 }
