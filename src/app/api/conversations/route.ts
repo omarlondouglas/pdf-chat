@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from("conversations")
     .select("id, title, created_at, updated_at")
     .order("updated_at", { ascending: false })
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as { title?: string };
   const title = body.title?.trim() || "Nova conversa";
 
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from("conversations")
     .insert({ title })
     .select("id, title, created_at, updated_at")

@@ -1,17 +1,24 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-const url = process.env.SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+let client: SupabaseClient | null = null;
 
-if (!url || !key) {
-  throw new Error(
-    "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars are required"
-  );
+export function getSupabase(): SupabaseClient {
+  if (client) return client;
+
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !key) {
+    throw new Error(
+      "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars are required"
+    );
+  }
+
+  client = createClient(url, key, {
+    auth: { persistSession: false },
+  });
+  return client;
 }
-
-export const supabase = createClient(url, key, {
-  auth: { persistSession: false },
-});
 
 export type Conversation = {
   id: string;

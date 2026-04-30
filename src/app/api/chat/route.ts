@@ -1,7 +1,7 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { loadPdfContext } from "@/lib/pdf";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -29,6 +29,8 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+
+  const supabase = getSupabase();
 
   // Load existing history for this conversation
   const { data: history, error: histErr } = await supabase
