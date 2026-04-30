@@ -1,14 +1,17 @@
 # syntax=docker/dockerfile:1.6
 
 # ---- deps ----
-FROM node:22-bookworm-slim AS deps
+FROM node:22-alpine AS deps
 WORKDIR /app
+
+# libc6-compat helps some native modules; tini for proper signal handling at runtime stage too
+RUN apk add --no-cache libc6-compat
 
 COPY package.json package-lock.json ./
 RUN npm ci --include=optional
 
 # ---- builder ----
-FROM node:22-bookworm-slim AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -19,8 +22,10 @@ COPY . .
 RUN npm run build
 
 # ---- runner ----
-FROM node:22-bookworm-slim AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
+
+RUN apk add --no-cache libc6-compat
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -28,8 +33,8 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV HOME=/home/nextjs
 
-RUN groupadd --system --gid 1001 nodejs \
- && useradd  --system --uid 1001 --gid nodejs --create-home --home-dir /home/nextjs nextjs
+RUN addgroup -g 1001 -S nodejs \
+ && adduser -S -u 1001 -G nodejs -h /home/nextjs nextjs
 
 # Public assets and standalone server
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
