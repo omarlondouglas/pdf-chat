@@ -9,8 +9,17 @@ export function getSupabase(): SupabaseClient {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
+    const visible = Object.keys(process.env)
+      .filter((k) => /SUPABASE|AUTH_|CLAUDE_|ANTHROPIC/.test(k))
+      .sort();
+    console.error(
+      "[supabase] env vars missing. Visible runtime vars matching SUPABASE/AUTH/CLAUDE/ANTHROPIC:",
+      visible.length ? visible : "(none)"
+    );
     throw new Error(
-      "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars are required"
+      `SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars are required (visible: ${
+        visible.join(",") || "none"
+      })`
     );
   }
 
