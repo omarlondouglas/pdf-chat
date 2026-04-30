@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { LogOut, Plus, Trash2, MessageSquare } from "lucide-react";
+import { LogOut, Plus, Trash2, MessageSquare, Menu, X } from "lucide-react";
 import ChatInput from "@/components/ui/prompt-input-dynamic-grow";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 
@@ -30,6 +30,7 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [bootstrapped, setBootstrapped] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const loadConversations = useCallback(async () => {
@@ -147,18 +148,37 @@ export default function Home() {
     );
   }
 
+  function selectConversation(id: string) {
+    setActiveId(id);
+    setSidebarOpen(false);
+  }
+
+  function startNew() {
+    newConversation();
+    setSidebarOpen(false);
+  }
+
   // Empty state (no active conversation, no messages) → HeroWave
   if (!activeId && messages.length === 0) {
     return (
-      <main className="bg-[#05060a] min-h-screen flex">
+      <main className="bg-[#05060a] min-h-screen flex relative">
         <Sidebar
           conversations={conversations}
           activeId={activeId}
-          onSelect={setActiveId}
-          onNew={newConversation}
+          onSelect={selectConversation}
+          onNew={startNew}
           onDelete={deleteConversation}
           onLogout={logout}
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
         />
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="md:hidden fixed top-4 left-4 z-40 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 backdrop-blur border border-white/20 text-white"
+          aria-label="Abrir menu"
+        >
+          <Menu size={18} />
+        </button>
         <div className="flex-1 relative">
           <HeroWave
             title="Converse com seu PDF"
@@ -174,17 +194,19 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#05060a] text-white flex relative overflow-hidden">
+    <main className="min-h-[100dvh] bg-[#05060a] text-white flex relative overflow-hidden">
       <Sidebar
         conversations={conversations}
         activeId={activeId}
-        onSelect={setActiveId}
-        onNew={newConversation}
+        onSelect={selectConversation}
+        onNew={startNew}
         onDelete={deleteConversation}
         onLogout={logout}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="flex-1 flex flex-col relative">
+      <div className="flex-1 flex flex-col relative min-w-0">
         <div
           className="pointer-events-none absolute inset-x-0 top-0 h-[40vh] opacity-60"
           style={{
@@ -193,7 +215,14 @@ export default function Home() {
           }}
         />
 
-        <header className="relative z-10 px-6 py-4 border-b border-white/10 bg-black/30 backdrop-blur flex items-center justify-between">
+        <header className="relative z-10 px-4 sm:px-6 py-3 sm:py-4 border-b border-white/10 bg-black/30 backdrop-blur flex items-center gap-3">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 text-white shrink-0"
+            aria-label="Abrir menu"
+          >
+            <Menu size={18} />
+          </button>
           <h1 className="text-sm font-medium text-white/90 truncate">
             {conversations.find((c) => c.id === activeId)?.title ||
               "Nova conversa"}
@@ -202,7 +231,7 @@ export default function Home() {
 
         <div
           ref={scrollRef}
-          className="flex-1 overflow-y-auto px-4 py-8 relative z-10"
+          className="flex-1 overflow-y-auto px-3 sm:px-4 py-6 sm:py-8 relative z-10"
         >
           <div className="max-w-3xl mx-auto flex flex-col gap-4">
             {messages.map((m, i) => (
@@ -213,7 +242,7 @@ export default function Home() {
                 }`}
               >
                 <div
-                  className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+                  className={`max-w-[85%] sm:max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
                     m.role === "user"
                       ? "bg-[#1f3dbc] text-white shadow-[0_4px_24px_rgba(31,61,188,0.4)] whitespace-pre-wrap"
                       : "bg-white/5 border border-white/10 text-gray-100 backdrop-blur-md"
@@ -243,7 +272,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="sticky bottom-6 px-4 z-20 flex justify-center">
+        <div className="sticky bottom-4 sm:bottom-6 px-3 sm:px-4 z-20 flex justify-center">
           <ChatInput
             placeholder="Pergunte sobre o PDF"
             onSubmit={send}
@@ -264,6 +293,8 @@ function Sidebar({
   onNew,
   onDelete,
   onLogout,
+  open,
+  onClose,
 }: {
   conversations: Conversation[];
   activeId: string | null;
@@ -271,9 +302,23 @@ function Sidebar({
   onNew: () => void;
   onDelete: (id: string) => void;
   onLogout: () => void;
+  open: boolean;
+  onClose: () => void;
 }) {
   return (
-    <aside className="w-64 shrink-0 bg-black/40 border-r border-white/10 backdrop-blur flex flex-col h-screen sticky top-0 z-30">
+    <>
+      {/* Mobile backdrop */}
+      <div
+        onClick={onClose}
+        className={`md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${
+          open ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+      />
+      <aside
+        className={`fixed md:sticky top-0 left-0 z-50 w-72 md:w-64 shrink-0 bg-black/80 md:bg-black/40 border-r border-white/10 backdrop-blur flex flex-col h-[100dvh] md:h-screen transition-transform duration-200 md:translate-x-0 ${
+          open ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        }`}
+      >
       <div className="p-4 border-b border-white/10">
         <button
           onClick={onNew}
@@ -307,7 +352,7 @@ function Sidebar({
                 e.stopPropagation();
                 onDelete(c.id);
               }}
-              className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-red-400"
+              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity text-gray-500 hover:text-red-400 p-1"
               aria-label="Excluir conversa"
             >
               <Trash2 size={14} />
@@ -325,6 +370,16 @@ function Sidebar({
           Sair
         </button>
       </div>
+
+      {/* Close button on mobile */}
+      <button
+        onClick={onClose}
+        className="md:hidden absolute top-3 right-3 w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 text-white"
+        aria-label="Fechar menu"
+      >
+        <X size={18} />
+      </button>
     </aside>
+    </>
   );
 }

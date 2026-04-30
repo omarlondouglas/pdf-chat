@@ -829,27 +829,16 @@ export function HeroWave({
   return (
     <section
       ref={containerRef}
-      className={className}
+      className={`relative w-full h-screen ${className ?? ""}`}
       style={{
-        position: "relative",
-        width: "100%",
-        height: "100vh",
+        height: "100dvh",
         ...style,
       }}
       aria-label="Animated hero"
     >
       {showNavbar && <Navbar />}
       <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          zIndex: 3,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          pointerEvents: "none",
-          padding: "24px",
-        }}
+        className="absolute inset-0 z-[3] flex items-center justify-center px-4 sm:px-6 py-6 pointer-events-none"
       >
         <div
           className="max-w-3xl w-full text-center"
