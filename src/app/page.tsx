@@ -73,7 +73,12 @@ export default function Home() {
   async function ensureConversation(): Promise<string> {
     if (activeId) return activeId;
     const res = await fetch("/api/conversations", { method: "POST" });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.conversation?.id) {
+      throw new Error(
+        data?.error || `Falha ao criar conversa (HTTP ${res.status})`
+      );
+    }
     const id = data.conversation.id as string;
     setActiveId(id);
     setConversations((prev) => [data.conversation, ...prev]);
@@ -82,23 +87,25 @@ export default function Home() {
 
   async function send(value: string) {
     setLoading(true);
-    const conversationId = await ensureConversation();
-    const optimistic: Message[] = [...messages, { role: "user", content: value }];
+    const optimistic: Message[] = [
+      ...messages,
+      { role: "user", content: value },
+    ];
     setMessages(optimistic);
 
     try {
+      const conversationId = await ensureConversation();
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ conversationId, message: value }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "request failed");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: data.answer },
       ]);
-      // refresh conversation list (title may have updated)
       loadConversations();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
